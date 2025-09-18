@@ -30,7 +30,7 @@ def set_origin_faces(obj, sel_faces):
     # ------------------------------------------------------------
     # Build rotation matrix to align normal to Z axis
     # ------------------------------------------------------------
-    z_axis = Vector((0, 0, 1))
+    z_axis = Vector((0, 0, -1))
     rot_axis = normal.cross(z_axis)
 
     if rot_axis.length < 1e-6:
@@ -57,7 +57,7 @@ def set_origin_faces(obj, sel_faces):
     # Update mesh
     bmesh.update_edit_mesh(obj.data)
 
-    vertex_transform = Matrix.Translation(median) @ Matrix.Translation(Vector((0, 0, 0)))  # 
+    vertex_transform = Matrix.Translation(median) @ Matrix.Translation(Vector((0, 0, 0)))  #
     vertex_transform = Matrix.Translation(median) @ rot_mat.inverted().to_4x4()
 
     # Multiply object world matrix by vertex transform to keep object in place
