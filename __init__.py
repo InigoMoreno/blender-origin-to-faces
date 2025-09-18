@@ -1,11 +1,11 @@
-import bpy
 import bmesh
-from mathutils import Vector, Matrix
+import bpy
+from mathutils import Matrix, Vector
 
 bl_info = {
     "name": "Origin to Selected Faces (Align to XY)",
     "author": "Iñigo Moreno i Caireta",
-    "version": (1, 1),
+    "version": (1, 3),
     "blender": (3, 0, 0),
     "location": "Object > Set Origin",
     "description": "Set origin to median of selected faces and align them to XY plane",
@@ -13,39 +13,55 @@ bl_info = {
 }
 
 
-def set_origin_faces(obj, faces):
-    """Compute median, align faces to XY, set origin without moving geometry."""
-    verts = {v for f in faces for v in f.verts}
-    median_local = sum((v.co for v in verts), Vector()) / len(verts)
-    avg_normal_local = sum((f.normal for f in faces), Vector()).normalized()
+def set_origin_faces(obj, sel_faces):
+    bm = bmesh.from_edit_mesh(obj.data)
+    all_verts = set()
+    for f in sel_faces:
+        all_verts.update(f.verts)
+    median = sum((v.co for v in all_verts), Vector()) / len(all_verts)
 
-    world_median = obj.matrix_world @ median_local
-    world_normal = (obj.matrix_world.to_3x3() @ avg_normal_local).normalized()
+    # ------------------------------------------------------------
+    # Compute average normal of selected faces
+    # ------------------------------------------------------------
+    normal = sum((f.normal for f in sel_faces), Vector()).normalized()
+    if normal.length < 1e-6:
+        raise RuntimeError("Face normal is zero length; cannot orient.")
 
+    # ------------------------------------------------------------
+    # Build rotation matrix to align normal to Z axis
+    # ------------------------------------------------------------
     z_axis = Vector((0, 0, 1))
-    if world_normal.length < 1e-6:
-        raise RuntimeError("Normal is zero length; cannot orient.")
+    rot_axis = normal.cross(z_axis)
 
-    rot_axis = world_normal.cross(z_axis)
     if rot_axis.length < 1e-6:
-        if world_normal.dot(z_axis) > 0:
+        # Normal is already aligned or opposite
+        if normal.dot(z_axis) > 0:
             rot_mat = Matrix.Identity(3)
         else:
             rot_mat = Matrix.Rotation(3.14159265, 3, Vector((1, 0, 0)))
     else:
         rot_axis.normalize()
-        angle = world_normal.angle(z_axis)
+        angle = normal.angle(z_axis)
         rot_mat = Matrix.Rotation(angle, 3, rot_axis)
 
-    # Apply transformation without moving geometry
-    bpy.ops.object.mode_set(mode='OBJECT')
-    orig_world = obj.matrix_world.copy()
+    # ------------------------------------------------------------
+    # Move vertices so that median is at origin
+    # Then apply rotation to flatten on XY plane
+    # ------------------------------------------------------------
+    for v in bm.verts:
+        # Move relative to median
+        v.co -= median
+        # Apply rotation
+        v.co = rot_mat @ v.co
 
-    new_world_matrix = rot_mat.to_4x4()
-    new_world_matrix.translation = world_median
-    mesh_adjust = (new_world_matrix.inverted() @ orig_world)
-    obj.data.transform(mesh_adjust)
-    obj.matrix_world = new_world_matrix
+    # Update mesh
+    bmesh.update_edit_mesh(obj.data)
+
+    vertex_transform = Matrix.Translation(median) @ Matrix.Translation(Vector((0, 0, 0)))  # 
+    vertex_transform = Matrix.Translation(median) @ rot_mat.inverted().to_4x4()
+
+    # Multiply object world matrix by vertex transform to keep object in place
+    obj.matrix_world = obj.matrix_world @ vertex_transform
 
 
 class OBJECT_OT_origin_to_faces_xy(bpy.types.Operator):
@@ -83,17 +99,17 @@ class OBJECT_OT_origin_to_faces_xy(bpy.types.Operator):
 def menu_func(self, context):
     self.layout.operator(
         OBJECT_OT_origin_to_faces_xy.bl_idname,
-        icon='ORIGIN_CURSOR'
+        icon='NONE'
     )
 
 
 def register():
     bpy.utils.register_class(OBJECT_OT_origin_to_faces_xy)
-    bpy.types.VIEW3D_MT_object_origin_set.append(menu_func)
+    bpy.types.VIEW3D_MT_object.append(menu_func)
 
 
 def unregister():
-    bpy.types.VIEW3D_MT_object_origin_set.remove(menu_func)
+    bpy.types.VIEW3D_MT_object.remove(menu_func)
     bpy.utils.unregister_class(OBJECT_OT_origin_to_faces_xy)
 
 
