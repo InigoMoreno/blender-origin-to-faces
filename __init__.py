@@ -89,11 +89,11 @@ def menu_func(self, context):
 
 def register():
     bpy.utils.register_class(OBJECT_OT_origin_to_faces_xy)
-    bpy.types.VIEW3D_MT_object_origin_set.append(menu_func)
+    bpy.types.VIEW3D_MT_object.append(menu_func)
 
 
 def unregister():
-    bpy.types.VIEW3D_MT_object_origin_set.remove(menu_func)
+    bpy.types.VIEW3D_MT_object.remove(menu_func)
     bpy.utils.unregister_class(OBJECT_OT_origin_to_faces_xy)
 
 
